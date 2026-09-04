@@ -1,0 +1,109 @@
+#!/bin/bash
+# wow-patch - park/unpark the WoW Interface/ICONS folder around Battle.net patches.
+#
+# Why: Wine/CEF's directory enumeration livelocks against the 32k-file flat
+# Interface/ICONS directory during a stage-3 patch apply (see ~/Documents/battlenet.md
+# §3-4, §10, §13). Moving the folder aside makes the patch skip it entirely;
+# moving it back afterwards restores the icons for normal play. Both moves are
+# same-filesystem renames, so they are instant and don't touch file contents.
+#
+# Usage:
+#   wow-patch park     Quit Battle.net/Agent/wineserver, move ICONS out of the way
+#   wow-patch unpark    Move ICONS back into place
+#   wow-patch status    Show whether ICONS is currently parked
+#   wow-patch auto       park, relaunch Battle.net, wait for you to confirm the
+#                         patch finished, then unpark automatically
+#
+# Config: override WOW_DIR if your install path ever changes.
+
+set -euo pipefail
+
+WOW_DIR="${WOW_DIR:-/mnt/games/Games/WoW Linux/World of Warcraft}"
+ICONS_LIVE="$WOW_DIR/_retail_/Interface/ICONS"
+ICONS_PARKED="$WOW_DIR/ICONS_parked"
+
+usage() {
+  grep '^#' "$0" | sed -n '2,20p' | sed 's/^# \{0,1\}//'
+  exit 1
+}
+
+require_wow_dir() {
+  if [[ ! -d "$WOW_DIR" ]]; then
+    echo "error: WoW install not found at: $WOW_DIR" >&2
+    echo "(set WOW_DIR=... if the install has moved)" >&2
+    exit 1
+  fi
+}
+
+status() {
+  if [[ -d "$ICONS_PARKED" ]]; then
+    echo "PARKED: $ICONS_PARKED"
+    echo "  (live path is empty: $ICONS_LIVE)"
+  elif [[ -d "$ICONS_LIVE" ]]; then
+    n=$(find "$ICONS_LIVE" -maxdepth 1 -type f | wc -l)
+    echo "IN PLACE: $ICONS_LIVE ($n files)"
+  else
+    echo "error: ICONS is neither at its live path nor parked. Investigate manually." >&2
+    exit 1
+  fi
+}
+
+kill_battlenet() {
+  echo "Quitting Battle.net / Agent / wineserver..."
+  pkill -f 'Battle\.net' 2>/dev/null || true
+  pkill -f 'Agent\.exe' 2>/dev/null || true
+  pkill -f wineserver 2>/dev/null || true
+  # give wineserver a moment to release file handles before we move anything
+  sleep 2
+}
+
+park() {
+  require_wow_dir
+  if [[ -d "$ICONS_PARKED" ]]; then
+    echo "Already parked at $ICONS_PARKED - nothing to do."
+    return 0
+  fi
+  if [[ ! -d "$ICONS_LIVE" ]]; then
+    echo "error: $ICONS_LIVE does not exist; can't park it." >&2
+    exit 1
+  fi
+  kill_battlenet
+  echo "Parking ICONS: $ICONS_LIVE -> $ICONS_PARKED"
+  mv "$ICONS_LIVE" "$ICONS_PARKED"
+  echo "Done. Launch Battle.net and run the update now."
+}
+
+unpark() {
+  require_wow_dir
+  if [[ -d "$ICONS_LIVE" ]]; then
+    echo "Already in place at $ICONS_LIVE - nothing to do."
+    return 0
+  fi
+  if [[ ! -d "$ICONS_PARKED" ]]; then
+    echo "error: $ICONS_PARKED does not exist; nothing to restore." >&2
+    exit 1
+  fi
+  echo "Restoring ICONS: $ICONS_PARKED -> $ICONS_LIVE"
+  mv "$ICONS_PARKED" "$ICONS_LIVE"
+  n=$(find "$ICONS_LIVE" -maxdepth 1 -type f | wc -l)
+  echo "Done. $n files restored."
+}
+
+auto() {
+  park
+  echo
+  echo "Launching Battle.net..."
+  omarchy-launch-battlenet &
+  echo
+  echo "Let the update run. Once WoW shows up-to-date / Play, come back here"
+  read -rp "and press Enter to restore the icon pack (or Ctrl-C to unpark later yourself): " _
+  unpark
+}
+
+case "${1:-}" in
+  park)   park ;;
+  unpark) unpark ;;
+  status) status ;;
+  auto)   auto ;;
+  *)      usage ;;
+esac
