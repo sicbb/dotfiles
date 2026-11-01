@@ -24,6 +24,21 @@
 --     dim_strength = 0.15,
 --   },
 -- })
+hl.config({
+	general = {
+		gaps_in = 3,
+		gaps_out = 6,
+	},
+	decoration = {
+		rounding = 8,
+		active_opacity = 1,
+		inactive_opacity = 1,
+	},
+})
+
+-- Omarchy applies a default window rule (opacity "0.985 0.96") plus per-app
+-- rules (e.g. browsers). Override them all with a fully opaque catch-all.
+o.window(".*", { opacity = "1 1" })
 
 -- https://wiki.hypr.land/Configuring/Basics/Variables/#animations
 -- hl.config({
