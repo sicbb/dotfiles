@@ -25,3 +25,4 @@ alias yayupdate="yay -Syu"
 alias yayremove="yay -Rns"
 alias yaycache="yay -Sc"     # Cache aufräumen
 
+source ~/.bashrc_creds
